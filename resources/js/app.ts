@@ -24,5 +24,11 @@ createInertiaApp({
     },
 });
 
-// This will set light / dark mode on page load...
+document.addEventListener('inertia:before', (event: any) => {
+    if (event.detail.visit.url.href.includes('/auth/')) {
+        event.preventDefault();
+        window.location.href = event.detail.visit.url.href;
+    }
+});
+
 initializeTheme();
