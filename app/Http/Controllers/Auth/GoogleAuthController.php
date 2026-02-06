@@ -26,7 +26,7 @@ class GoogleAuthController extends Controller
         try {
             $googleUser = Socialite::driver('google')->user();
         } catch (\Exception $e) {
-            $intendedUrl = session('url.intended', route('landing'));
+            $intendedUrl = session('url.intended', route('forms.show', ['slug' => 'saso-office']));
             session()->forget('url.intended');
 
             return redirect($intendedUrl)
