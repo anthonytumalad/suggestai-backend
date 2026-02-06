@@ -1,5 +1,5 @@
 <template>
-    <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div class="min-h-screen flex items-center justify-center">
         <div class="max-w-md w-full bg-white rounded-lg shadow-xl p-8 text-center">
             <div class="mb-8">
                 <h1 class="text-3xl font-bold text-gray-900 mb-2">
@@ -18,7 +18,6 @@
                 <p class="text-sm text-blue-600">{{ message }}</p>
             </div>
 
-            <!-- Regular link - will be ignored by Inertia due to our event listener -->
             <a
                 href="/auth/google/redirect"
                 class="inline-flex items-center justify-center w-full px-6 py-3 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition-colors duration-200"

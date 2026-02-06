@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Models\Form;
+use App\Policies\FormPolicy;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -10,6 +12,10 @@ use Illuminate\Validation\Rules\Password;
 
 class AppServiceProvider extends ServiceProvider
 {
+    protected $policies = [
+        Form::class => FormPolicy::class,
+    ];
+
     /**
      * Register any application services.
      */

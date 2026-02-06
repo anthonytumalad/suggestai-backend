@@ -4,11 +4,6 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\FormController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\SuggestionController;
-use Inertia\Inertia;
-
-Route::get('/', function () {
-    return Inertia::render('Landing');
-})->name('landing');
 
 Route::middleware('student.auth')->group(function () {
     Route::get('/forms/{slug}', [FormController::class, 'show'])

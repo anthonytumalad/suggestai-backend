@@ -56,6 +56,17 @@ class FormController extends Controller
         ], 201);
     }
 
+    public function showById(int $id)
+    {
+        $form = Form::findOrFail($id);
+
+        $this->authorize('view', $form);
+
+        return response()->json([
+            'data' => new FormResource($form),
+        ]);
+    }
+
     public function show(string $slug)
     {
         $form = Form::where('slug', $slug)
