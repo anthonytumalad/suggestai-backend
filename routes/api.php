@@ -21,6 +21,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('forms')->group(function () {
         Route::get('/', [FormController::class, 'index'])->name('forms.index');
         Route::post('/', [FormController::class, 'store'])->name('forms.store');
+        Route::get('/forms/{form}', [FormController::class, 'showById'])->name('forms.showById');
 
         Route::get('{form}/suggestions', [SuggestionController::class, 'index'])->name('forms.suggestions');
         Route::post('{formId}/suggestions/analyze', [SuggestionController::class, 'analyzeTopics'])->name('forms.analyze');

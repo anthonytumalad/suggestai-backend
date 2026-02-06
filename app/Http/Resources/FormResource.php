@@ -21,6 +21,8 @@ class FormResource extends JsonResource
             'description' => $this->description,
             'is_active' => $this->is_active,
             'img_url' => $this->img_url,
+            'url' => $this->url,
+            'qr_code_url' => $this->qr_code_url,
             'user_id' => $this->user_id,
             'suggestions_count' => $this->whenCounted('suggestions'),
             'created_at' => $this->created_at->toDateTimeString(),
