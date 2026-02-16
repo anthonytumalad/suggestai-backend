@@ -17,7 +17,6 @@ class GoogleAuthController extends Controller
         }
 
         return Socialite::driver('google')
-            // ->with(['hd' => 'thelewiscollege.edu.ph'])
             ->redirect();
     }
 

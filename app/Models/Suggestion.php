@@ -32,4 +32,23 @@ class Suggestion extends Model
     {
         return $this->belongsTo(Student::class);
     }
+
+    public function topics()
+    {
+        return $this->belongsToMany(
+            Topic::class,
+            'document_topics',
+            'suggestion_id',
+            'topic_id'
+        )
+            ->withPivot('probability', 'is_primary')
+            ->withTimestamps();
+    }
+
+    public function primaryTopic()
+    {
+        return $this->topics()
+            ->wherePivot('is_primary', true)
+            ->first();
+    }
 }
