@@ -10,6 +10,7 @@ class TopicModelingSession extends Model
     use HasFactory;
 
     protected $fillable = [
+        'form_id',
         'name',
         'source_type',
         'total_topics',
@@ -42,5 +43,10 @@ class TopicModelingSession extends Model
     public function scopeLatestFirst($query)
     {
         return $query->orderByDesc('created_at');
+    }
+
+    public function form()
+    {
+        return $this->belongsTo(Form::class);
     }
 }
