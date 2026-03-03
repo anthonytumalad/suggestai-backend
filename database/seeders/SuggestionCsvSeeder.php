@@ -10,7 +10,7 @@ class SuggestionCsvSeeder extends Seeder
 {
     public function run()
     {
-        $path = storage_path('app/seeders/campus_problems.csv');
+        $path = storage_path('app/seeders/accounting_problems.csv');
 
         if (!file_exists($path)) {
             $this->command->error("CSV file not found: {$path}");
@@ -29,7 +29,7 @@ class SuggestionCsvSeeder extends Seeder
             $isAnonymous = rand(0, 1) === 1;
 
             $rows[] = [
-                'form_id'      => 562,
+                'form_id'      => 563,
                 'student_id'   => $isAnonymous ? null : (count($studentIds) ? $studentIds[array_rand($studentIds)] : null),
                 'suggestion'   => $line,
                 'is_anonymous' => $isAnonymous,

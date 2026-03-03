@@ -75,4 +75,9 @@ class Form extends Model
     {
         return $this->hasMany(Suggestion::class);
     }
+
+    public function topicSessions()
+    {
+        return $this->hasMany(TopicModelingSession::class);
+    }
 }
