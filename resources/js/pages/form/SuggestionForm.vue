@@ -30,7 +30,7 @@
                         <h1 class="text-2xl font-medium">
                             {{ form.title }}
                         </h1>
-                        <p v-if="form?.description" class="text-sm font-normal">
+                        <p v-if="form?.description" class="text-sm font-normal whitespace-pre-line">
                             {{ form.description }}
                         </p>
                     </div>

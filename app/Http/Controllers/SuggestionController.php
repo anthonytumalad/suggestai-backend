@@ -83,4 +83,28 @@ class SuggestionController extends Controller
 
         return redirect()->back()->with('success', 'Your suggestion has been submitted successfully!');
     }
+
+    public function destroy(int $formId, int $id): JsonResponse
+    {
+        $suggestion = Suggestion::where('form_id', $formId)
+            ->findOrFail($id);
+
+        $suggestion->delete();
+
+        return response()->json(null, 204);
+    }
+
+    public function bulkDestroy(Request $request, int $formId): JsonResponse
+    {
+        $validated = $request->validate([
+            'ids'   => 'required|array|min:1',
+            'ids.*' => 'integer',
+        ]);
+
+        Suggestion::where('form_id', $formId)
+            ->whereIn('id', $validated['ids'])
+            ->delete();
+
+        return response()->json(null, 204);
+    }
 }
