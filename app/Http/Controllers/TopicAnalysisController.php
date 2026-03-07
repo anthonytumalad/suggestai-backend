@@ -2,128 +2,129 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\RunTopicAnalysis;
 use App\Models\Form;
 use App\Services\TopicModelingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
 class TopicAnalysisController extends Controller
 {
+    private const MIN_BLOCK = 50;
+    private const MIN_WARN  = 150;
+
     public function __construct(private TopicModelingService $service) {}
 
-    public function analyze(Request $request, int $formId): JsonResponse
+
+    private function validateDateRange(Request $request): void
     {
         $request->validate([
             'start_date' => 'nullable|date',
             'end_date'   => 'nullable|date|after_or_equal:start_date',
         ]);
+    }
+
+    private function cacheKey(int $formId, ?string $start, ?string $end): string
+    {
+        return "topic_analysis:{$formId}:{$start}:{$end}";
+    }
+
+
+    public function analyze(Request $request, int $formId): JsonResponse
+    {
+        $this->validateDateRange($request);
 
         $form      = Form::findOrFail($formId);
         $startDate = $request->start_date;
         $endDate   = $request->end_date;
 
-        $existingSession = $this->service->findExistingSession($formId, $startDate, $endDate);
-
-        if ($existingSession) {
+        $existing = $this->service->findExistingSession($formId, $startDate, $endDate);
+        if ($existing) {
             return response()->json([
                 'success'            => false,
                 'duplicate_detected' => true,
-                'message'            => 'A summary for this date range already exists. Clear it first before generating a new one.',
-                'existing_session'   => [
-                    'id'              => $existingSession->id,
-                    'name'            => $existingSession->name,
-                    'total_topics'    => $existingSession->total_topics,
-                    'total_documents' => $existingSession->total_documents,
-                    'created_at'      => $existingSession->created_at,
-                ],
+                'message'            => 'A summary for this date range already exists.',
+                'existing_session'   => $this->formatSession($existing),
             ], 409);
         }
 
         $suggestions = $this->service->suggestionQuery($formId, $startDate, $endDate)->get();
-
         if ($suggestions->isEmpty()) {
+            return $this->noSuggestionsResponse($startDate, $endDate);
+        }
+
+        $count = $suggestions->count();
+
+        // Hard block — too few for BERTopic to produce meaningful results
+        if ($count < self::MIN_BLOCK) {
             return response()->json([
                 'success' => false,
-                'message' => 'No suggestions found for the selected date range.',
-                'data'    => null,
+                'message' => 'Not enough responses yet. At least ' . self::MIN_BLOCK . ' suggestions are required to run analysis.',
                 'meta'    => [
-                    'total_analyzed' => 0,
+                    'total_analyzed' => $count,
+                    'minimum_required' => self::MIN_BLOCK,
                     'date_range'     => ['start' => $startDate, 'end' => $endDate],
                 ],
-            ], 404);
+            ], 422);
         }
 
-        try {
-            $topicData = $this->service->callPythonService(
-                $suggestions->pluck('suggestion')->toArray()
-            );
-        } catch (\Exception $e) {
-            Log::error('Analyze Topics — Python service error', [
-                'message' => $e->getMessage(),
-                'trace'   => $e->getTraceAsString(),
-            ]);
+        RunTopicAnalysis::dispatch($formId, $startDate, $endDate, Auth::id());
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Error analyzing topics',
-                'error'   => $e->getMessage(),
-                'trace'   => config('app.debug') ? $e->getTraceAsString() : null,
-            ], 500);
-        }
-
-        $existingSession = $this->service->findExistingSession($formId, $startDate, $endDate);
-
-        $responseData = [
+        $response = [
             'success' => true,
-            'message' => 'Analysis completed. Review and save when ready.',
-            'preview' => [
-                'total_topics'    => $topicData['total_topics'],
-                'total_documents' => $topicData['total_documents'],
-                'outliers'        => $topicData['outliers'],
-                'topics'          => collect($topicData['summary'])->map(fn($topic) => [
-                    'topic_id'             => $topic['topic_id'],
-                    'label'                => $topic['label'],
-                    'document_count'       => $topic['count'],
-                    'representation_score' => $topic['representation_score'],
-                    'keywords'             => $topic['top_keywords'],
-                ]),
-            ],
-            'meta' => [
+            'message' => 'Analysis started. Poll /analyze/status to check progress.',
+            'meta'    => [
                 'form_id'        => $formId,
                 'form_title'     => $form->title,
+                'total_analyzed' => $count,
                 'date_range'     => ['start' => $startDate, 'end' => $endDate],
-                'total_analyzed' => $suggestions->count(),
             ],
         ];
 
-        if ($existingSession) {
-            $responseData['duplicate_detected'] = true;
-            $responseData['message']            = 'A session with this date range already exists. Review and choose an action.';
-            $responseData['comparison']         = [
-                'existing_session' => [
-                    'id'              => $existingSession->id,
-                    'name'            => $existingSession->name,
-                    'total_topics'    => $existingSession->total_topics,
-                    'total_documents' => $existingSession->total_documents,
-                    'outliers'        => $existingSession->outliers,
-                    'created_at'      => $existingSession->created_at,
-                    'topics_preview'  => $existingSession->topics->take(5)->map(fn($topic) => [
-                        'label'          => $topic->label,
-                        'document_count' => $topic->document_count,
-                        'keywords'       => $topic->keywords->take(5)->pluck('keyword'),
-                    ]),
-                ],
-                'differences' => [
-                    'topic_count_change'    => $topicData['total_topics'] - $existingSession->total_topics,
-                    'document_count_change' => $topicData['total_documents'] - $existingSession->total_documents,
-                    'outlier_change'        => $topicData['outliers'] - $existingSession->outliers,
-                    'analysis_age'          => $existingSession->created_at->diffForHumans(),
-                ],
-            ];
+        // Soft warn — analysis will run but results may be limited
+        if ($count < self::MIN_WARN) {
+            $response['warning'] = 'Results may be limited with fewer than ' . self::MIN_WARN . ' suggestions. Topics identified may not be fully representative.';
         }
 
-        return response()->json($responseData, 200);
+        return response()->json($response, 202);
+    }
+
+
+    public function status(Request $request, int $formId): JsonResponse
+    {
+        $startDate = $request->start_date;
+        $endDate   = $request->end_date;
+        $cached    = cache()->get($this->cacheKey($formId, $startDate, $endDate));
+
+        if (!$cached) {
+            return response()->json(['status' => 'pending'], 202);
+        }
+
+        $topicData = $cached['topic_data'];
+        $form      = Form::findOrFail($formId);
+        $existing  = $this->service->findExistingSession($formId, $startDate, $endDate);
+
+        $response = [
+            'status'  => 'ready',
+            'success' => true,
+            'message' => 'Analysis completed. Review and save when ready.',
+            'preview' => $this->formatPreview($topicData),
+            'meta'    => [
+                'form_id'        => $formId,
+                'form_title'     => $form->title,
+                'date_range'     => ['start' => $startDate, 'end' => $endDate],
+                'total_analyzed' => $cached['total_analyzed'],
+            ],
+        ];
+
+        if ($existing) {
+            $response['duplicate_detected'] = true;
+            $response['message']            = 'A session with this date range already exists.';
+            $response['comparison']         = $this->formatComparison($topicData, $existing);
+        }
+
+        return response()->json($response);
     }
 
 
@@ -136,93 +137,54 @@ class TopicAnalysisController extends Controller
             'action'       => 'nullable|in:keep_both,replace',
         ]);
 
-        $form        = Form::findOrFail($formId);
-        $startDate   = $request->start_date;
-        $endDate     = $request->end_date;
-        $minRequired = 10;
+        $form      = Form::findOrFail($formId);
+        $startDate = $request->start_date;
+        $endDate   = $request->end_date;
+        $cached    = cache()->get($this->cacheKey($formId, $startDate, $endDate));
 
-        $suggestions = $this->service->suggestionQuery($formId, $startDate, $endDate)->get();
-
-        if ($suggestions->isEmpty()) {
+        if (!$cached) {
             return response()->json([
                 'success' => false,
-                'message' => 'No suggestions found for the selected date range.',
-                'meta'    => [
-                    'total_analyzed'   => 0,
-                    'minimum_required' => $minRequired,
-                    'date_range'       => ['start' => $startDate, 'end' => $endDate],
-                ],
-            ], 404);
+                'message' => 'No analysis found. Run analyze first.',
+            ], 422);
         }
 
-        if ($suggestions->count() < $minRequired) {
+        $count = count($cached['suggestion_ids']);
+
+        if ($count < self::MIN_BLOCK) {
             return response()->json([
                 'success' => false,
-                'message' => "At least {$minRequired} suggestions are needed, but only {$suggestions->count()} were found.",
-                'meta'    => [
-                    'total_analyzed'   => $suggestions->count(),
-                    'minimum_required' => $minRequired,
-                    'date_range'       => ['start' => $startDate, 'end' => $endDate],
-                ],
+                'message' => 'At least ' . self::MIN_BLOCK . ' suggestions are required.',
+                'meta'    => ['total_analyzed' => $count],
             ], 422);
         }
 
         try {
-            $topicData = $this->service->callPythonService(
-                $suggestions->pluck('suggestion')->toArray()
-            );
-
-            $existingSession = $this->service->findExistingSession($formId, $startDate, $endDate);
-
-            if ($existingSession && $request->action === 'replace') {
-                $this->service->deleteSession($existingSession);
+            $existing = $this->service->findExistingSession($formId, $startDate, $endDate);
+            if ($existing && $request->action === 'replace') {
+                $this->service->deleteSession($existing);
             }
 
             $session = $this->service->persistSession(
-                form:          $form,
-                topicData:     $topicData,
-                suggestionIds: $suggestions->pluck('id')->toArray(),
-                startDate:     $startDate,
-                endDate:       $endDate,
-                sessionName:   $request->session_name,
+                form: $form,
+                topicData: $cached['topic_data'],
+                suggestionIds: $cached['suggestion_ids'],
+                startDate: $startDate,
+                endDate: $endDate,
+                sessionName: $request->session_name,
             );
-        } catch (\Exception $e) {
-            Log::error('Save Topic Session Error', [
-                'message' => $e->getMessage(),
-                'trace'   => $e->getTraceAsString(),
-            ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Error saving topic session',
-                'error'   => $e->getMessage(),
-                'trace'   => config('app.debug') ? $e->getTraceAsString() : null,
-            ], 500);
+            cache()->forget($this->cacheKey($formId, $startDate, $endDate));
+        } catch (\Exception $e) {
+            return $this->serverError('Error saving topic session', $e);
         }
 
         return response()->json([
             'success' => true,
             'message' => $request->action === 'replace'
                 ? 'Session replaced successfully.'
-                : 'Topic modeling session saved successfully.',
-            'data' => [
-                'session' => [
-                    'id'              => $session->id,
-                    'name'            => $session->name,
-                    'total_topics'    => $session->total_topics,
-                    'total_documents' => $session->total_documents,
-                    'outliers'        => $session->outliers,
-                    'created_at'      => $session->created_at,
-                ],
-                'topics' => $session->topics->map(fn($topic) => [
-                    'id'                   => $topic->id,
-                    'topic_id'             => $topic->topic_id,
-                    'label'                => $topic->label,
-                    'document_count'       => $topic->document_count,
-                    'representation_score' => $topic->representation_score,
-                    'keywords'             => $topic->keywords->pluck('keyword'),
-                ]),
-            ],
+                : 'Topic session saved successfully.',
+            'data' => $this->formatSavedSession($session),
             'meta' => [
                 'form_id'      => $formId,
                 'form_title'   => $form->title,
@@ -230,5 +192,88 @@ class TopicAnalysisController extends Controller
                 'action_taken' => $request->action ?? 'new',
             ],
         ], 201);
+    }
+
+
+    private function formatSession($session): array
+    {
+        return [
+            'id'              => $session->id,
+            'name'            => $session->name,
+            'total_topics'    => $session->total_topics,
+            'total_documents' => $session->total_documents,
+            'outliers'        => $session->outliers,
+            'created_at'      => $session->created_at,
+        ];
+    }
+
+    private function formatPreview(array $topicData): array
+    {
+        return [
+            'total_topics'    => $topicData['total_topics'],
+            'total_documents' => $topicData['total_documents'],
+            'outliers'        => $topicData['outliers'],
+            'topics'          => collect($topicData['summary'])->map(fn($t) => [
+                'topic_id'             => $t['topic_id'],
+                'label'                => $t['label'],
+                'document_count'       => $t['count'],
+                'representation_score' => $t['representation_score'],
+                'keywords'             => $t['top_keywords'],
+            ]),
+        ];
+    }
+
+    private function formatComparison(array $topicData, $existing): array
+    {
+        return [
+            'existing_session' => [
+                ...$this->formatSession($existing),
+                'topics_preview' => $existing->topics->take(5)->map(fn($t) => [
+                    'label'          => $t->label,
+                    'document_count' => $t->document_count,
+                    'keywords'       => $t->keywords->take(5)->pluck('keyword'),
+                ]),
+            ],
+            'differences' => [
+                'topic_count_change'    => $topicData['total_topics']    - $existing->total_topics,
+                'document_count_change' => $topicData['total_documents'] - $existing->total_documents,
+                'outlier_change'        => $topicData['outliers']        - $existing->outliers,
+                'analysis_age'          => $existing->created_at->diffForHumans(),
+            ],
+        ];
+    }
+
+    private function formatSavedSession($session): array
+    {
+        return [
+            'session' => $this->formatSession($session),
+            'topics'  => $session->topics->map(fn($t) => [
+                'id'                   => $t->id,
+                'topic_id'             => $t->topic_id,
+                'label'                => $t->label,
+                'document_count'       => $t->document_count,
+                'representation_score' => $t->representation_score,
+                'keywords'             => $t->keywords->pluck('keyword'),
+            ]),
+        ];
+    }
+
+    private function noSuggestionsResponse(?string $start, ?string $end): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'message' => 'No suggestions found for the selected date range.',
+            'meta'    => ['total_analyzed' => 0, 'date_range' => ['start' => $start, 'end' => $end]],
+        ], 404);
+    }
+
+    private function serverError(string $message, \Exception $e): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+            'error'   => $e->getMessage(),
+            'trace'   => config('app.debug') ? $e->getTraceAsString() : null,
+        ], 500);
     }
 }

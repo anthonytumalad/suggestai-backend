@@ -28,6 +28,20 @@ class FormController extends Controller
             ->withCount('suggestions')
             ->latest();
 
+        if ($search = $request->input('search')) {
+            $query->where('title', 'like', "%{$search}%");
+        }
+
+        if ($request->has('is_active')) {
+            $query->where('is_active', filter_var($request->input('is_active'), FILTER_VALIDATE_BOOLEAN));
+        }
+
+        match ($request->input('sort', 'newest')) {
+            'oldest'           => $query->oldest(),
+            'most_suggestions' => $query->orderByDesc('suggestions_count'),
+            default            => $query->latest(),
+        };
+
         return $this->paginateWithResource(
             $query,
             FormResource::class,

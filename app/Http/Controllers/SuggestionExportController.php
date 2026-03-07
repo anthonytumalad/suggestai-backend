@@ -27,15 +27,15 @@ class SuggestionExportController extends Controller
 
         return match ($type) {
             'csv'  => Excel::download(
-                          new SuggestionsExport($formId, $startDate, $endDate),
-                          $filename,
-                          \Maatwebsite\Excel\Excel::CSV,
-                          ['Content-Type' => 'text/csv']
-                      ),
+                new SuggestionsExport($formId, $startDate, $endDate),
+                $filename,
+                \Maatwebsite\Excel\Excel::CSV,
+                ['Content-Type' => 'text/csv']
+            ),
             'xlsx' => Excel::download(
-                          new SuggestionsExport($formId, $startDate, $endDate),
-                          $filename
-                      ),
+                new SuggestionsExport($formId, $startDate, $endDate),
+                $filename
+            ),
             'pdf'  => $this->exportPdf($formId, $form->title, $startDate, $endDate, $filename),
         };
     }
@@ -47,20 +47,26 @@ class SuggestionExportController extends Controller
         ?string $endDate,
         string  $filename
     ) {
-        $query = Suggestion::with('student:id,email')
-            ->where('form_id', $formId);
+        ini_set('memory_limit', '512M');
 
-        if ($startDate) $query->whereDate('created_at', '>=', $startDate);
-        if ($endDate)   $query->whereDate('created_at', '<=', $endDate);
-
-        $suggestions = $query->latest()->get();
+        $suggestions = Suggestion::with('student:id,email')
+            ->where('form_id', $formId)
+            ->when($startDate, fn($q) => $q->whereDate('created_at', '>=', $startDate))
+            ->when($endDate,   fn($q) => $q->whereDate('created_at', '<=', $endDate))
+            ->latest()
+            ->limit(500)
+            ->get();
 
         $pdf = Pdf::loadView('exports.suggestions', [
             'suggestions' => $suggestions,
             'formTitle'   => $formTitle,
             'startDate'   => $startDate,
             'endDate'     => $endDate,
-        ])->setPaper('a4', 'landscape');
+        ])
+            ->setPaper('a4', 'landscape')
+            ->setOption('isHtml5ParserEnabled', true)
+            ->setOption('isRemoteEnabled', false)
+            ->setOption('defaultFont', 'sans-serif');
 
         return $pdf->download($filename);
     }

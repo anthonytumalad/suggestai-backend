@@ -8,11 +8,15 @@ use App\Http\Controllers\TopicAnalysisController;
 use App\Http\Controllers\TopicSessionController;
 use App\Http\Controllers\VisualizationController;
 use App\Http\Controllers\SuggestionExportController;
+use App\Http\Controllers\ReportController;
+use App\Http\Controllers\DashboardController;
 
 Route::prefix('auth')->group(function () {
     Route::post('/register', [SigninController::class, 'register']);
     Route::post('/authenticate', [SigninController::class, 'authenticate']);
 });
+
+Route::get('/dashboard', [DashboardController::class, 'index']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('auth')->group(function () {
@@ -28,12 +32,18 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{form}', [FormController::class, 'showById'])->name('forms.showById');
 
         Route::prefix('{formId}')->group(function () {
-            Route::get('/suggestions', [SuggestionController::class, 'index'])->name('forms.suggestions.index');
-            Route::post('/suggestions/analyze', [TopicAnalysisController::class, 'analyze'])->name('forms.topics.analyze');
-            Route::post('/suggestions/save', [TopicAnalysisController::class, 'save'])->name('forms.topics.save');
-            Route::get('/topic-sessions', [TopicSessionController::class, 'index'])->name('forms.sessions.index');
-            Route::get('/topic-sessions/{sessionId}', [TopicSessionController::class, 'show'])->name('forms.sessions.show');
-            Route::get('/suggestions/export', [SuggestionExportController::class, 'export'])->name('forms.suggestions.export');
+            Route::get('/suggestions',                       [SuggestionController::class, 'index'])->name('forms.suggestions.index');
+            Route::delete('/suggestions/{suggestionId}',     [SuggestionController::class, 'destroy']);
+            Route::delete('/suggestions',                    [SuggestionController::class, 'bulkDestroy']);
+
+            Route::post('/suggestions/analyze',              [TopicAnalysisController::class, 'analyze'])->name('forms.topics.analyze');
+            Route::get('/suggestions/analyze/status',  [TopicAnalysisController::class, 'status']);
+            Route::post('/suggestions/save',                 [TopicAnalysisController::class, 'save'])->name('forms.topics.save');
+            Route::get('/suggestions/export',                [SuggestionExportController::class, 'export'])->name('forms.suggestions.export');
+
+            Route::get('/topic-sessions',                    [TopicSessionController::class, 'index'])->name('forms.sessions.index');
+            Route::get('/topic-sessions/{sessionId}',        [TopicSessionController::class, 'show'])->name('forms.sessions.show');
+
         });
 
         Route::prefix('{formId}/sessions/{session}/visualization')->group(function () {
@@ -43,4 +53,11 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('stats',        [VisualizationController::class, 'stats']);
         });
     });
+
+    Route::get('/reports',              [ReportController::class, 'index']);
+    Route::post('/reports',                  [ReportController::class, 'store']);
+    Route::get('/reports/{report}',     [ReportController::class, 'show']);
+    Route::get('/reports/{report}/download', [ReportController::class, 'download']);
+    Route::delete('/reports/{report}',  [ReportController::class, 'destroy']);
+    Route::delete('/reports',           [ReportController::class, 'bulkDestroy']);
 });
