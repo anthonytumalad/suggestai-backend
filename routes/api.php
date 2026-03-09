@@ -30,6 +30,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/',       [FormController::class, 'index'])->name('forms.index');
         Route::post('/',      [FormController::class, 'store'])->name('forms.store');
         Route::get('/{form}', [FormController::class, 'showById'])->name('forms.showById');
+        Route::post('/{form}', [FormController::class, 'update'])->name('forms.update');  // ← here
 
         Route::prefix('{formId}')->group(function () {
             Route::get('/suggestions',                       [SuggestionController::class, 'index'])->name('forms.suggestions.index');
@@ -43,7 +44,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
             Route::get('/topic-sessions',                    [TopicSessionController::class, 'index'])->name('forms.sessions.index');
             Route::get('/topic-sessions/{sessionId}',        [TopicSessionController::class, 'show'])->name('forms.sessions.show');
-
         });
 
         Route::prefix('{formId}/sessions/{session}/visualization')->group(function () {

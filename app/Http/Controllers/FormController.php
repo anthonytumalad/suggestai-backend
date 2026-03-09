@@ -70,6 +70,26 @@ class FormController extends Controller
         ], 201);
     }
 
+    public function update(CreateFormRequest $request, int $id)
+    {
+        $form = Form::findOrFail($id);
+        $this->authorize('update', $form);
+
+        $data = $request->validated();
+
+        if (!empty($data['img'])) {
+            $path = $data['img']->store('forms', 'public');
+            $data['img_path'] = "storage/{$path}";
+        }
+
+        $form->update($data);
+
+        return response()->json([
+            'message' => 'Form updated successfully',
+            'data' => new FormResource($form),
+        ]);
+    }
+
     public function showById(int $id)
     {
         $form = Form::findOrFail($id);
