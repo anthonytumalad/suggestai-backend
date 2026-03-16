@@ -30,7 +30,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/',       [FormController::class, 'index'])->name('forms.index');
         Route::post('/',      [FormController::class, 'store'])->name('forms.store');
         Route::get('/{form}', [FormController::class, 'showById'])->name('forms.showById');
-        Route::post('/{form}', [FormController::class, 'update'])->name('forms.update');  // ← here
+        Route::put('/{form}', [FormController::class, 'update'])->name('forms.update');
+        Route::delete('/{form}', [FormController::class, 'destroy'])->name('forms.destroy');
 
         Route::prefix('{formId}')->group(function () {
             Route::get('/suggestions',                       [SuggestionController::class, 'index'])->name('forms.suggestions.index');

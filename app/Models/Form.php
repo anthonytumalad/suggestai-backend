@@ -46,7 +46,16 @@ class Form extends Model
         $this->attributes['title'] = $value;
 
         if (empty($this->attributes['slug'])) {
-            $this->attributes['slug'] = Str::slug($value);
+            $baseSlug = Str::slug($value);
+            $slug     = $baseSlug;
+            $count    = 1;
+
+            while (static::withoutTrashed()->where('slug', $slug)->exists()) {
+                $slug = "{$baseSlug}-{$count}";
+                $count++;
+            }
+
+            $this->attributes['slug'] = $slug;
         }
     }
 

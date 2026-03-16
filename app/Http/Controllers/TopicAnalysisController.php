@@ -56,7 +56,6 @@ class TopicAnalysisController extends Controller
 
         $count = $suggestions->count();
 
-        // Hard block — too few for BERTopic to produce meaningful results
         if ($count < self::MIN_BLOCK) {
             return response()->json([
                 'success' => false,
@@ -82,7 +81,6 @@ class TopicAnalysisController extends Controller
             ],
         ];
 
-        // Soft warn — analysis will run but results may be limited
         if ($count < self::MIN_WARN) {
             $response['warning'] = 'Results may be limited with fewer than ' . self::MIN_WARN . ' suggestions. Topics identified may not be fully representative.';
         }
@@ -101,7 +99,29 @@ class TopicAnalysisController extends Controller
             return response()->json(['status' => 'pending'], 202);
         }
 
-        $topicData = $cached['topic_data'];
+        if ($cached['status'] === 'running') {
+            return response()->json(['status' => 'running'], 202);
+        }
+
+        if ($cached['status'] === 'failed') {
+            return response()->json([
+                'status' => 'failed',
+                'message' => $cached['message'] ?? 'Analysis failed'
+            ], 500);
+        }
+
+        if ($cached['status'] === 'empty') {
+            return response()->json([
+                'status' => 'empty',
+                'message' => 'No suggestions found for this range.'
+            ], 200);
+        }
+
+        if ($cached['status'] !== 'complete') {
+            return response()->json(['status' => 'processing'], 202);
+        }
+
+        $topicData = $cached['topic_data'] ?? null;
         $form      = Form::findOrFail($formId);
         $existing  = $this->service->findExistingSession($formId, $startDate, $endDate);
 

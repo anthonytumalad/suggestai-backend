@@ -13,6 +13,9 @@ use Inertia\Inertia;
 use Endroid\QrCode\Builder\Builder;
 use Endroid\QrCode\Writer\SvgWriter;
 
+use Illuminate\Support\Facades\Log;
+
+
 class FormController extends Controller
 {
     use AuthorizesRequests, Pagination;
@@ -52,15 +55,25 @@ class FormController extends Controller
 
     public function store(CreateFormRequest $request)
     {
-        $this->authorize('store', Form::class);
+        $this->authorize('create', Form::class);
+
+        Log::info('Store request debug', [
+            'has_file'     => $request->hasFile('img'),
+            'all_files'    => $request->allFiles(),
+            'all_input'    => $request->all(),
+            'content_type' => $request->header('Content-Type'),
+        ]);
 
         $data = $request->validated();
         $data['user_id'] = Auth::id();
 
-        if (!empty($data['img'])) {
-            $path = $data['img']->store('forms', 'public');
+        if ($request->hasFile('img') && $request->file('img')->isValid()) {
+            $path = $request->file('img')->store('forms', 'public');
             $data['img_path'] = "storage/{$path}";
         }
+
+        unset($data['img']);
+
 
         $form = Form::create($data);
 
@@ -70,17 +83,29 @@ class FormController extends Controller
         ], 201);
     }
 
-    public function update(CreateFormRequest $request, int $id)
+    public function destroy(Form $form)
     {
-        $form = Form::findOrFail($id);
+        $this->authorize('delete', $form);
+
+        $form->delete();
+
+        return response()->json([
+            'message' => 'Form deleted successfully',
+        ]);
+    }
+
+    public function update(CreateFormRequest $request, Form $form)
+    {
         $this->authorize('update', $form);
 
         $data = $request->validated();
 
-        if (!empty($data['img'])) {
-            $path = $data['img']->store('forms', 'public');
+        if ($request->hasFile('img') && $request->file('img')->isValid()) {
+            $path = $request->file('img')->store('forms', 'public');
             $data['img_path'] = "storage/{$path}";
         }
+
+        unset($data['img']); // ← add this
 
         $form->update($data);
 
