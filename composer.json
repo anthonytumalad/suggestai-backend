@@ -21,6 +21,7 @@
         "laravel/wayfinder": "^0.1.9",
         "league/csv": "^9.28",
         "maatwebsite/excel": "^3.1",
+        "mpdf/mpdf": "^8.3",
         "phpoffice/phpspreadsheet": "^1.30"
     },
     "require-dev": {
