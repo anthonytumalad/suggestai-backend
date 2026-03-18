@@ -57,7 +57,7 @@ class TopicModelingService
         $url = config('services.python_bertopic.url');
 
         /** @var Response $response */
-        $response = Http::timeout(60)->post($url, [
+        $response = Http::timeout(300)->post($url, [
             'documents' => $documents,
         ]);
 
